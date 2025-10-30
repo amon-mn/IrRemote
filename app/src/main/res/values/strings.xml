@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">IrRemote</string>
+    <string name="title_activity_device">DeviceActivity</string>
 </resources>
