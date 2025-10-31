@@ -1,52 +1,92 @@
+// Em: ui/activities/HomeActivity.java
+
 package devtitans.irremote.ui.activities;
 
+import android.content.Intent; // Certifique-se que o Intent está importado
+import android.hardware.ConsumerIrManager;
+import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import android.content.Intent;
-import android.os.Bundle;
-import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.Arrays;
 import java.util.List;
-import devtitans.irremote.R;
-import devtitans.irremote.data.model.Device;
-import devtitans.irremote.ui.adapters.DeviceAdapter;
+
+import androidx.activity.EdgeToEdge;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
+import devtitans.irremote.R; // Importar R
+import devtitans.irremote.ui.adapters.DeviceAdapter; // Importar o Adapter
 
 public class HomeActivity extends AppCompatActivity {
+
+    private ConsumerIrManager ir;
+    private TextView irStatus;
+    private RecyclerView recyclerViewDevices;
+    private DeviceAdapter deviceAdapter;
+    private List<String> deviceList; // Use List<Device> se tiver o modelo
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_home);
-
-        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.home_layout_root), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
+        Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        RecyclerView recyclerView = findViewById(R.id.recyclerViewDevices);
-        recyclerView.setLayoutManager(new GridLayoutManager(this, 2));
+        irStatus = findViewById(R.id.textViewStatus);
+        recyclerViewDevices = findViewById(R.id.recyclerViewDevices);
 
-        FloatingActionButton fab = findViewById(R.id.fab);
-        fab.setOnClickListener(view -> {
-            // Futuramente, abrir tela de criação de dispositivo
+        ir = (ConsumerIrManager) getSystemService(CONSUMER_IR_SERVICE);
+        checkEmitterStatus();
+        setupRecyclerView();
+    }
+
+    private void checkEmitterStatus() {
+        boolean has = (ir != null) && ir.hasIrEmitter();
+        irStatus.setText(has ? "Status: Emissor IR Conectado" : "Status: Emissor IR Desconectado");
+    }
+
+    private void setupRecyclerView() {
+        // Dados de exemplo
+        deviceList = new ArrayList<>(Arrays.asList("DataShow", "ArCondicionado Split", "SmartLamp", "Tv IR"));
+        deviceAdapter = new DeviceAdapter(deviceList, deviceName -> {
+            Intent intent = new Intent(HomeActivity.this, DeviceActivity.class);
+            intent.putExtra("DEVICE_NAME", deviceName);
+            startActivity(intent);
         });
 
-        // Mock data
-        List<Device> deviceList = new ArrayList<>();
-        deviceList.add(new Device("DataShow", "00:11:22:33:44:55", new Date(), R.drawable.ic_datashow));
-        deviceList.add(new Device("SmartLamp", "AA:BB:CC:DD:EE:FF", new Date(), R.drawable.ic_smartlamp));
-        deviceList.add(new Device("Split", "11:22:33:44:55:66", new Date(), R.drawable.ic_air_conditioner));
-        deviceList.add(new Device("Tv IR", "A1:B2:C3:D4:E5:F6", new Date(), R.drawable.ic_tv));
+        int numberOfColumns = 2;
+        recyclerViewDevices.setLayoutManager(new GridLayoutManager(this, numberOfColumns));;
+        recyclerViewDevices.setAdapter(deviceAdapter);
+    }
 
-        DeviceAdapter.OnItemClickListener listener = device -> {
-            Intent intent = new Intent(HomeActivity.this, DeviceActivity.class);
-            // Passar dados do dispositivo para a próxima tela, se necessário
-            // intent.putExtra("DEVICE_ID", device.getId());
-            startActivity(intent);
-        };
+    // --- Lógica do Menu da AppBar ---
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.home_menu, menu);
+        return true;
+    }
 
-        DeviceAdapter adapter = new DeviceAdapter(deviceList, listener);
-        recyclerView.setAdapter(adapter);
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Verifica se o ID do item clicado é o do 'action_menu'
+        if (item.getItemId() == R.id.action_menu) {
+            Toast.makeText(this, "Menu Clicado", Toast.LENGTH_SHORT).show();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 }

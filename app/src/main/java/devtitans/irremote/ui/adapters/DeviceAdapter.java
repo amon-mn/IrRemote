@@ -3,26 +3,28 @@ package devtitans.irremote.ui.adapters;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-import java.text.SimpleDateFormat;
 import java.util.List;
-import java.util.Locale;
 import devtitans.irremote.R;
+// Importe o seu modelo de dados Device (se estiver a usá-lo)
 import devtitans.irremote.data.model.Device;
 
+// Adapte para usar o seu modelo de dados (Device) em vez de String, se já o criou.
+// Vou usar String por agora, para corresponder aos seus layouts.
 public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> {
 
-    private final List<Device> deviceList;
-    private final OnItemClickListener listener;
+    private List<String> deviceList; // Mude para List<Device> se estiver a usar o modelo
+    private OnDeviceClickListener listener;
 
-    public interface OnItemClickListener {
-        void onItemClick(Device device);
+    // *** PASSO CRÍTICO 1: A INTERFACE ***
+    // Esta interface permite que a Activity (HomeActivity) saiba qual item foi clicado.
+    public interface OnDeviceClickListener {
+        void onDeviceClick(String deviceName); // Mude para Device device se usar o modelo
     }
 
-    public DeviceAdapter(List<Device> deviceList, OnItemClickListener listener) {
+    public DeviceAdapter(List<String> deviceList, OnDeviceClickListener listener) {
         this.deviceList = deviceList;
         this.listener = listener;
     }
@@ -30,15 +32,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
     @NonNull
     @Override
     public DeviceViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View itemView = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.list_item_device, parent, false);
-        return new DeviceViewHolder(itemView);
+        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_device, parent, false);
+        return new DeviceViewHolder(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull DeviceViewHolder holder, int position) {
-        Device currentDevice = deviceList.get(position);
-        holder.bind(currentDevice, listener);
+        String deviceName = deviceList.get(position);
+        holder.bind(deviceName, listener);
     }
 
     @Override
@@ -47,25 +48,18 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
     }
 
     static class DeviceViewHolder extends RecyclerView.ViewHolder {
-        private final TextView textViewName;
-        private final TextView textViewCreationDate;
-        private final ImageView imageViewDeviceIcon;
+        TextView deviceNameTextView;
 
         public DeviceViewHolder(@NonNull View itemView) {
             super(itemView);
-            textViewName = itemView.findViewById(R.id.textViewDeviceName);
-            textViewCreationDate = itemView.findViewById(R.id.textViewCreationDate);
-            imageViewDeviceIcon = itemView.findViewById(R.id.imageViewDeviceIcon);
+            deviceNameTextView = itemView.findViewById(R.id.textViewDeviceName);
         }
 
-        public void bind(final Device device, final OnItemClickListener listener) {
-            textViewName.setText(device.getName());
-            imageViewDeviceIcon.setImageResource(device.getIconResId());
-
-            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
-            textViewCreationDate.setText(sdf.format(device.getCreationDate()));
-
-            itemView.setOnClickListener(v -> listener.onItemClick(device));
+        // *** PASSO CRÍTICO 2: O BIND ***
+        // O ViewHolder liga o clique ao listener
+        public void bind(final String deviceName, final OnDeviceClickListener listener) {
+            deviceNameTextView.setText(deviceName);
+            itemView.setOnClickListener(v -> listener.onDeviceClick(deviceName));
         }
     }
 }
