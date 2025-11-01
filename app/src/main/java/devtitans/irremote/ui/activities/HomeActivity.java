@@ -83,7 +83,7 @@ public class HomeActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Verifica se o ID do item clicado é o do 'action_menu'
-        if (item.getItemId() == R.id.action_menu) {
+        if (item.getItemId() == R.id.action_scan) {
             Toast.makeText(this, "Menu Clicado", Toast.LENGTH_SHORT).show();
             return true;
         }

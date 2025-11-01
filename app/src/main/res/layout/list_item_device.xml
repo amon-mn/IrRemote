@@ -34,7 +34,7 @@
             android:id="@+id/textViewCreationDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="01/01/2024"
+            android:text="30/10/2025"
             android:textAppearance="?attr/textAppearanceCaption" />
 
     </LinearLayout>

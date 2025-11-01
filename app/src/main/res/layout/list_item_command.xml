@@ -2,7 +2,8 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:background="?android:attr/selectableItemBackground">
 
     <TextView
         android:id="@+id/textViewCommandName"
@@ -21,6 +22,7 @@
         android:layout_alignParentEnd="true"
         android:layout_centerVertical="true"
         android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Excluir"
         android:src="@android:drawable/ic_menu_delete" />
 
     <ImageButton
@@ -31,5 +33,6 @@
         android:layout_centerVertical="true"
         android:layout_marginEnd="16dp"
         android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Enviar"
         android:src="@android:drawable/ic_menu_send" />
 </RelativeLayout>
