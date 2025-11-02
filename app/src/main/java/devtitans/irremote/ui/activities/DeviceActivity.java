@@ -7,10 +7,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -27,12 +24,12 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.appcompat.app.AlertDialog;
-
-// Importe o tipo Nullable correto (AndroidX ou JetBrains)
-// Vou usar o do AndroidX androidx.annotation.Nullable
 import androidx.annotation.Nullable;
+import android.view.Menu;
+import android.view.MenuItem;
+import androidx.appcompat.widget.SearchView;
 
-public class DeviceActivity extends AppCompatActivity {
+public class DeviceActivity extends AppCompatActivity implements SearchView.OnQueryTextListener {
 
     private ConsumerIrManager ir;
     private ListView listViewCommands;
@@ -53,13 +50,13 @@ public class DeviceActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
-        // Define o Título Dinâmico
+
         deviceName = getIntent().getStringExtra("DEVICE_NAME");
         if (deviceName == null) deviceName = "Dispositivo";
 
         Toolbar toolbar = findViewById(R.id.toolbar_device);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setTitle(deviceName); // <-- Título definido aqui
+        getSupportActionBar().setTitle(deviceName);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
         // Referências
@@ -68,7 +65,7 @@ public class DeviceActivity extends AppCompatActivity {
         textViewEmpty = findViewById(R.id.textViewEmpty);
 
         ir = (ConsumerIrManager) getSystemService(CONSUMER_IR_SERVICE);
-        mRepository = new IrCommandRepository(getApplication());
+        mRepository = new IrCommandRepository(getApplication()); // Verifique se o Repository está no caminho certo
 
         // 1. Configurar o Adapter
         setupAdapter();
@@ -82,7 +79,38 @@ public class DeviceActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.home_menu, menu); // Infla o novo menu
+
+        MenuItem searchItem = menu.findItem(R.id.action_search);
+        SearchView searchView = (SearchView) searchItem.getActionView();
+
+        if (searchView != null) {
+            searchView.setOnQueryTextListener(this); // Define esta classe como o "ouvinte"
+            searchView.setQueryHint("Pesquisar comando...");
+        }
+        return true;
+    }
+
+    @Override
+    public boolean onQueryTextSubmit(String query) {
+        // Não precisamos de ação no "Submit", apenas na digitação
+        return false;
+    }
+
+    @Override
+    public boolean onQueryTextChange(String newText) {
+        // A mágica acontece aqui: O ArrayAdapter (CommandAdapter)
+        // usa o filtro nativo para pesquisar o texto do 'toString()' (o commandName).
+        if (commandAdapter != null) {
+            commandAdapter.getFilter().filter(newText);
+        }
+        return true;
+    }
+
     /**
+     * (ATUALIZADO E SIMPLIFICADO)
      * Cria e exibe um AlertDialog para ADICIONAR ou EDITAR um comando.
      * @param commandToEdit O comando a ser editado, ou 'null' se for para criar um novo.
      */
@@ -91,64 +119,26 @@ public class DeviceActivity extends AppCompatActivity {
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         LayoutInflater inflater = this.getLayoutInflater();
-        View dialogView = inflater.inflate(R.layout.dialog_add_command, null);
+        View dialogView = inflater.inflate(R.layout.dialog_add_command, null); // Usa o novo XML (sem RadioButtons)
         builder.setView(dialogView);
-
-        // Define o título dinamicamente
         builder.setTitle(isEditMode ? "Editar Comando" : "Adicionar Novo Comando");
 
-        // Referências aos campos do dialog
+        // Referências aos campos (agora apenas 3 campos)
         EditText etName = dialogView.findViewById(R.id.editTextCommandName);
-        RadioGroup radioGroup = dialogView.findViewById(R.id.radioGroupProtocol);
-        LinearLayout layoutTX = dialogView.findViewById(R.id.layoutTX);
-        LinearLayout layoutNEC = dialogView.findViewById(R.id.layoutNEC);
         EditText etFreq = dialogView.findViewById(R.id.editTextFrequency);
         EditText etPattern = dialogView.findViewById(R.id.editTextPattern);
-        EditText etHex = dialogView.findViewById(R.id.editTextHexCode);
-        RadioButton radioTX = dialogView.findViewById(R.id.radioTX);
-        RadioButton radioNEC = dialogView.findViewById(R.id.radioNEC);
+
+        // Removemos a lógica do RadioGroup
 
         // --- LÓGICA DE PRÉ-PREENCHIMENTO (Modo Edição) ---
         if (isEditMode) {
             etName.setText(commandToEdit.getCommandName());
-
-            if ("NEC".equals(commandToEdit.getProtocol())) {
-                radioNEC.setChecked(true);
-                layoutNEC.setVisibility(View.VISIBLE);
-                layoutTX.setVisibility(View.GONE);
-                etHex.setText(commandToEdit.getPayload()); // Payload é o Hex
-            } else { // "TX" ou outro
-                radioTX.setChecked(true);
-                layoutTX.setVisibility(View.VISIBLE);
-                layoutNEC.setVisibility(View.GONE);
-
-                // Extrai a freq e o pattern do payload "38000 9000,..."
-                String payload = commandToEdit.getPayload();
-                String[] parts = payload.split(" ", 2);
-                if (parts.length == 2) {
-                    etFreq.setText(parts[0]);
-                    etPattern.setText(parts[1]);
-                }
-            }
-        } else {
-            // Modo Criação (garante que TX esteja visível por defeito)
-            layoutTX.setVisibility(View.VISIBLE);
-            layoutNEC.setVisibility(View.GONE);
+            etFreq.setText(String.valueOf(commandToEdit.getFrequency()));
+            etPattern.setText(commandToEdit.getPattern());
         }
         // ------------------------------------------------
 
-        // Lógica para mostrar/esconder campos TX vs NEC
-        radioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.radioTX) {
-                layoutTX.setVisibility(View.VISIBLE);
-                layoutNEC.setVisibility(View.GONE);
-            } else if (checkedId == R.id.radioNEC) {
-                layoutTX.setVisibility(View.GONE);
-                layoutNEC.setVisibility(View.VISIBLE);
-            }
-        });
-
-        // Botão "Salvar" (agora faz Insert ou Update)
+        // Botão "Salvar" (agora só faz Insert ou Update de TX)
         builder.setPositiveButton(isEditMode ? "Salvar Alterações" : "Salvar", (dialog, which) -> {
             String commandName = etName.getText().toString().trim();
             if (commandName.isEmpty()) {
@@ -156,51 +146,29 @@ public class DeviceActivity extends AppCompatActivity {
                 return;
             }
 
-            String protocol;
-            String payload;
-
             try {
-                if (radioGroup.getCheckedRadioButtonId() == R.id.radioTX) {
-                    protocol = "TX";
-                    String freqStr = etFreq.getText().toString();
-                    String patternStr = etPattern.getText().toString().trim();
-                    if (freqStr.isEmpty() || patternStr.isEmpty()) {
-                        Toast.makeText(this, "Frequência e Padrão são obrigatórios", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    payload = freqStr + " " + patternStr;
+                // --- Lógica de Salvar (Raw TX) ---
+                String freqStr = etFreq.getText().toString();
+                String patternStr = etPattern.getText().toString().trim();
 
-                } else { // R.id.radioNEC
-                    protocol = "NEC";
-                    payload = etHex.getText().toString().trim();
-                    if (payload.isEmpty()) {
-                        Toast.makeText(this, "Código Hex não pode ser vazio", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
+                if (freqStr.isEmpty() || patternStr.isEmpty()) {
+                    Toast.makeText(this, "Frequência e Padrão são obrigatórios", Toast.LENGTH_SHORT).show();
+                    return;
                 }
+
+                int freq = Integer.parseInt(freqStr);
 
                 // --- LÓGICA DE SALVAR vs ATUALIZAR ---
                 if (isEditMode) {
                     // Atualiza o objeto existente
                     commandToEdit.setCommandName(commandName);
-                    commandToEdit.setProtocol(protocol);
-                    commandToEdit.setPayload(payload);
-                    // Atualiza a frequência (necessário para o TX)
-                    if ("TX".equals(protocol)) {
-                        commandToEdit.setFrequency(Integer.parseInt(etFreq.getText().toString()));
-                    } else {
-                        commandToEdit.setFrequency(38000); // Padrão NEC
-                    }
+                    commandToEdit.setFrequency(freq);
+                    commandToEdit.setPattern(patternStr);
                     mRepository.update(commandToEdit);
                     Toast.makeText(this, "Comando atualizado", Toast.LENGTH_SHORT).show();
                 } else {
                     // Cria um novo comando
-                    int freq = 38000; // Padrão
-                    if ("TX".equals(protocol)) {
-                        freq = Integer.parseInt(etFreq.getText().toString());
-                    }
-                    IrCommand newCommand = new IrCommand(deviceName, commandName, protocol, payload);
-                    newCommand.setFrequency(freq); // Define a frequência (necessário para a lógica TX)
+                    IrCommand newCommand = new IrCommand(deviceName, commandName, freq, patternStr);
                     mRepository.insert(newCommand);
                     Toast.makeText(this, "Comando salvo", Toast.LENGTH_SHORT).show();
                 }
@@ -214,11 +182,6 @@ public class DeviceActivity extends AppCompatActivity {
         builder.show();
     }
 
-// ---
-// --- OS MÉTODOS EM FALTA ESTAVAM AQUI FORA ---
-// --- AGORA ESTÃO DENTRO DA CLASSE DeviceActivity ---
-// ---
-
     private void setupAdapter() {
         commandAdapter = new CommandAdapter(this, mCommandList,
                 // Implementação do clique "Send"
@@ -229,7 +192,7 @@ public class DeviceActivity extends AppCompatActivity {
                 (command) -> {
                     deleteCommand(command);
                 },
-                // (NOVO) Implementação do clique "Edit"
+                // Implementação do clique "Edit"
                 (command) -> {
                     showAddCommandDialog(command); // Passa o comando a ser editado
                 }
@@ -239,11 +202,9 @@ public class DeviceActivity extends AppCompatActivity {
 
     private void observeCommands() {
         mRepository.getCommandsByDevice(deviceName).observe(this, commands -> {
-            mCommandList.clear();
-            mCommandList.addAll(commands);
+            commandAdapter.clear();
+            commandAdapter.addAll(commands);
             commandAdapter.notifyDataSetChanged();
-
-            // (META 1) Lógica de Visibilidade do Estado Vazio
             if (commands.isEmpty()) {
                 listViewCommands.setVisibility(View.GONE);
                 textViewEmpty.setVisibility(View.VISIBLE);
@@ -254,49 +215,31 @@ public class DeviceActivity extends AppCompatActivity {
         });
     }
 
-    // Lógica de Envio (Transmit)
+    /**
+     * (ATUALIZADO E SIMPLIFICADO)
+     * Lógica de Envio (Transmit) - Agora só trata TX
+     */
     private void transmitCommand(IrCommand command) {
         if (ir == null || !ir.hasIrEmitter()) {
             Toast.makeText(this, "Emissor IR não disponível", Toast.LENGTH_SHORT).show();
             return;
         }
-
         try {
-            String protocol = command.getProtocol();
+            int freq = command.getFrequency();
+            int[] pattern = command.getPatternAsArray();
 
-            if ("TX".equals(protocol)) {
-                // --- PROTOCOLO RAW (TX) ---
-                int freq = command.getTxFrequency();
-                int[] pattern = command.getTxPatternAsArray();
-
-                if (freq == 0 || pattern.length == 0) {
-                    Toast.makeText(this, "Erro no formato do padrão TX", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if ((pattern.length % 2) != 0) {
-                    Toast.makeText(this, "Erro: O padrão deve ter um número PAR de valores (ON/OFF).", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                // Chama o metodo padrão
-                ir.transmit(freq, pattern);
-                Toast.makeText(this, "Enviado TX: " + command.getCommandName(), Toast.LENGTH_SHORT).show();
-
-            } else if ("NEC".equals(protocol)) {
-                // --- PROTOCOLO NEC (CUSTOMIZADO) ---
-                String payload = command.getPayload();
-
-                // (Assumindo que a HAL/Driver trata o payload "NEC ...")
-                // (Ou que a API foi modificada para aceitar um hex)
-
-                // Vou usar a abordagem de "Payload como ASCII" discutida anteriormente,
-                // usando uma frequência "mágica" -1 para a HAL saber que é um NEC.
-                int freqMagica = -1;
-                int[] patternPayload = command.getPayloadAsAsciiIntArray(); // NECESSÁRIO CRIAR ESTE METODO
-
-                ir.transmit(freqMagica, patternPayload);
-
-                Toast.makeText(this, "Enviado NEC: " + command.getCommandName(), Toast.LENGTH_SHORT).show();
+            if (freq == 0 || pattern.length == 0) {
+                Toast.makeText(this, "Erro no formato do padrão", Toast.LENGTH_SHORT).show();
+                return;
             }
+            // Validação de Padrão PAR (da sua MainActivity original)
+            if ((pattern.length % 2) != 0) {
+                Toast.makeText(this, "Erro: O padrão deve ter um número PAR de valores (ON/OFF).", Toast.LENGTH_LONG).show();
+                return;
+            }
+            // Chama o metodo padrão
+            ir.transmit(freq, pattern);
+            Toast.makeText(this, "Enviado TX: " + command.getCommandName(), Toast.LENGTH_SHORT).show();
 
         } catch (Exception e) {
             Toast.makeText(this, "Erro ao enviar: " + e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -306,6 +249,7 @@ public class DeviceActivity extends AppCompatActivity {
     // Lógica de Exclusão (Delete)
     private void deleteCommand(IrCommand command) {
         mRepository.delete(command);
+        commandAdapter.notifyDataSetChanged();
         Toast.makeText(this, command.getCommandName() + " excluído", Toast.LENGTH_SHORT).show();
         // O LiveData atualizará a lista automaticamente
     }
@@ -315,4 +259,4 @@ public class DeviceActivity extends AppCompatActivity {
         onBackPressed(); // Lida com o clique no botão "Voltar" da AppBar
         return true;
     }
-} // <-- ESTA É A CHAVETA DE FECHO FINAL DA CLASSE
+}

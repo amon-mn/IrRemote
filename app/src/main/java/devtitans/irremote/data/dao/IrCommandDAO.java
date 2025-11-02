@@ -1,5 +1,3 @@
-// Em: app/src/main/java/devtitans/irremote/data/IrCommandDAO.java
-
 package devtitans.irremote.data.dao;
 
 import androidx.lifecycle.LiveData;

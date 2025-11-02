@@ -18,17 +18,11 @@ import devtitans.irremote.data.model.IrCommand;
 public class CommandAdapter extends ArrayAdapter<IrCommand> {
 
     // Interfaces para os cliques
-    public interface OnCommandSendListener {
-        void onSend(IrCommand command);
-    }
-    public interface OnCommandDeleteListener {
-        void onDelete(IrCommand command);
-    }
+    public interface OnCommandSendListener { void onSend(IrCommand command); }
+    public interface OnCommandDeleteListener { void onDelete(IrCommand command); }
+    public interface OnCommandEditListener { void onEdit(IrCommand command); }
 
-    public interface OnCommandEditListener {
-        void onEdit(IrCommand command);
-    }
-
+    // (Esta lista 'commands' é passada para o 'super' mas não deve ser usada para 'get' o item)
     private List<IrCommand> commands;
     private OnCommandSendListener sendListener;
     private OnCommandDeleteListener deleteListener;
@@ -39,7 +33,7 @@ public class CommandAdapter extends ArrayAdapter<IrCommand> {
                           OnCommandDeleteListener deleteListener,
                           OnCommandEditListener editListener) {
         super(context, 0, commands);
-        this.commands = commands;
+        this.commands = commands; // A 'mCommandList' da Activity
         this.sendListener = sendListener;
         this.deleteListener = deleteListener;
         this.editListener = editListener;
@@ -48,12 +42,20 @@ public class CommandAdapter extends ArrayAdapter<IrCommand> {
     @NonNull
     @Override
     public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-        // Infla o layout list_item_command.xml
         if (convertView == null) {
             convertView = LayoutInflater.from(getContext()).inflate(R.layout.list_item_command, parent, false);
         }
 
-        IrCommand command = commands.get(position);
+        // --- ESTA É A CORREÇÃO CRÍTICA ---
+        // NÃO use: IrCommand command = commands.get(position); (Isto usa a lista original)
+        // USE:
+        IrCommand command = getItem(position); // (Isto usa a lista filtrada interna do ArrayAdapter)
+        // ---------------------------------
+
+        // Proteção contra 'command' nulo (se o filtro estiver a meio)
+        if (command == null) {
+            return convertView;
+        }
 
         TextView tvName = convertView.findViewById(R.id.textViewCommandName);
         ImageButton btnSend = convertView.findViewById(R.id.buttonSend);
@@ -61,7 +63,7 @@ public class CommandAdapter extends ArrayAdapter<IrCommand> {
 
         tvName.setText(command.getCommandName());
 
-        // Define os cliques para os ícones
+        // Listeners dos Botões (como antes)
         btnSend.setOnClickListener(v -> {
             if (sendListener != null) {
                 sendListener.onSend(command);
@@ -74,6 +76,7 @@ public class CommandAdapter extends ArrayAdapter<IrCommand> {
             }
         });
 
+        // Listener de Edição
         convertView.setOnClickListener(v -> {
             if (editListener != null) {
                 editListener.onEdit(command);

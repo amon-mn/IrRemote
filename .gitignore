@@ -1,15 +1,20 @@
+# Ficheiros gerados pelo Android Studio / IntelliJ IDEA
 *.iml
-.gradle
+/.idea/
+
+# Ficheiros de Build e Cache do Gradle
+.gradle/
+/build/
+
+# Ficheiro de propriedades locais (SDK e chaves)
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+
+# Ficheiros de build Nativo (C/C++)
+.cxx/
+.externalNativeBuild/
+
+# Capturas de ecrã e vídeos do Emulador
+/captures/
+
+# Ficheiros de sistema operativo (macOS)
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties

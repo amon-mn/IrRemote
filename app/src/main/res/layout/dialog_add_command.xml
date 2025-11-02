@@ -17,78 +17,30 @@
             android:inputType="textCapWords"/>
     </com.google.android.material.textfield.TextInputLayout>
 
-    <RadioGroup
-        android:id="@+id/radioGroupProtocol"
+    <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="16dp">
+        android:layout_marginTop="16dp"
+        android:hint="Frequência (Hz), ex: 38000">
 
-        <RadioButton
-            android:id="@+id/radioTX"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Raw (TX)"
-            android:checked="true"/>
-        <RadioButton
-            android:id="@+id/radioNEC"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:text="NEC"/>
-    </RadioGroup>
-
-    <LinearLayout
-        android:id="@+id/layoutTX"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:visibility="visible">
-
-        <com.google.android.material.textfield.TextInputLayout
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/editTextFrequency"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Frequência (Hz), ex: 38000">
+            android:inputType="number"/>
+    </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/editTextFrequency"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="number"/>
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="Padrão (μs) separado por vírgulas">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/editTextPattern"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="text"/>
-        </com.google.android.material.textfield.TextInputLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/layoutNEC"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:visibility="gone"> <com.google.android.material.textfield.TextInputLayout
+    <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:hint="Código Hexadecimal (ex: 20DF10EF)">
+        android:hint="Padrão (μs) separado por vírgulas">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextHexCode"
+            android:id="@+id/editTextPattern"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textCapCharacters"/>
+            android:inputType="text"/>
     </com.google.android.material.textfield.TextInputLayout>
-    </LinearLayout>
 
 </LinearLayout>

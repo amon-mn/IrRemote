@@ -3,29 +3,31 @@ package devtitans.irremote.ui.adapters;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Filter;
+import android.widget.Filterable;
+import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import java.util.ArrayList;
 import java.util.List;
 import devtitans.irremote.R;
-// Importe o seu modelo de dados Device (se estiver a usá-lo)
-import devtitans.irremote.data.model.Device;
 
-// Adapte para usar o seu modelo de dados (Device) em vez de String, se já o criou.
-// Vou usar String por agora, para corresponder aos seus layouts.
-public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> {
+public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> implements Filterable { // <-- IMPLEMENTAR Filterable
 
-    private List<String> deviceList; // Mude para List<Device> se estiver a usar o modelo
+    private List<String> deviceListFiltered; // Lista que é mostrada
+    private final List<String> deviceListFull;   // Lista original (backup)
     private OnDeviceClickListener listener;
 
-    // *** PASSO CRÍTICO 1: A INTERFACE ***
-    // Esta interface permite que a Activity (HomeActivity) saiba qual item foi clicado.
     public interface OnDeviceClickListener {
-        void onDeviceClick(String deviceName); // Mude para Device device se usar o modelo
+        void onDeviceClick(String deviceName);
     }
 
+    // O construtor agora recebe a lista completa
     public DeviceAdapter(List<String> deviceList, OnDeviceClickListener listener) {
-        this.deviceList = deviceList;
+        this.deviceListFull = deviceList;
+        // No início, a lista filtrada é igual à lista completa
+        this.deviceListFiltered = new ArrayList<>(deviceListFull);
         this.listener = listener;
     }
 
@@ -38,27 +40,74 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
 
     @Override
     public void onBindViewHolder(@NonNull DeviceViewHolder holder, int position) {
-        String deviceName = deviceList.get(position);
+        // Usa a lista FILTRADA
+        String deviceName = deviceListFiltered.get(position);
         holder.bind(deviceName, listener);
     }
 
     @Override
     public int getItemCount() {
-        return deviceList.size();
+        // Retorna o tamanho da lista FILTRADA
+        return deviceListFiltered.size();
     }
+
+    // --- LÓGICA DO FILTRO ---
+    @Override
+    public Filter getFilter() {
+        return deviceFilter;
+    }
+
+    private Filter deviceFilter = new Filter() {
+        @Override
+        protected FilterResults performFiltering(CharSequence constraint) {
+            List<String> filteredList = new ArrayList<>();
+
+            // Se a pesquisa estiver vazia, mostra a lista completa
+            if (constraint == null || constraint.length() == 0) {
+                filteredList.addAll(deviceListFull);
+            } else {
+                // Converte a pesquisa para minúsculas
+                String filterPattern = constraint.toString().toLowerCase().trim();
+
+                // Itera sobre a lista COMPLETA
+                for (String deviceName : deviceListFull) {
+                    if (deviceName.toLowerCase().contains(filterPattern)) {
+                        filteredList.add(deviceName); // Adiciona se corresponder
+                    }
+                }
+            }
+
+            FilterResults results = new FilterResults();
+            results.values = filteredList;
+            return results;
+        }
+
+        @Override
+        protected void publishResults(CharSequence constraint, FilterResults results) {
+            deviceListFiltered.clear();
+            deviceListFiltered.addAll((List) results.values);
+            notifyDataSetChanged(); // Atualiza o RecyclerView
+        }
+    };
+    // --- FIM DA LÓGICA DO FILTRO ---
 
     static class DeviceViewHolder extends RecyclerView.ViewHolder {
         TextView deviceNameTextView;
+        TextView creationDateTextView; // IDs do teu XML
+        ImageView deviceIconImageView; // IDs do teu XML
 
         public DeviceViewHolder(@NonNull View itemView) {
             super(itemView);
+            // Certifica-te que estes IDs correspondem ao list_item_device.xml
             deviceNameTextView = itemView.findViewById(R.id.textViewDeviceName);
+            creationDateTextView = itemView.findViewById(R.id.textViewCreationDate);
+            deviceIconImageView = itemView.findViewById(R.id.imageViewDeviceIcon);
         }
 
-        // *** PASSO CRÍTICO 2: O BIND ***
-        // O ViewHolder liga o clique ao listener
         public void bind(final String deviceName, final OnDeviceClickListener listener) {
             deviceNameTextView.setText(deviceName);
+            // (Aqui podes definir a data e o ícone se tiveres o modelo Device completo)
+            // creationDateTextView.setText(...);
             itemView.setOnClickListener(v -> listener.onDeviceClick(deviceName));
         }
     }
