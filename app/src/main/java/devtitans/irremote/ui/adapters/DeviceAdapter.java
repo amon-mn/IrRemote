@@ -12,23 +12,27 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 import devtitans.irremote.R;
+import devtitans.irremote.data.model.Device; // Importar Modelo
 
-public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> implements Filterable { // <-- IMPLEMENTAR Filterable
+public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> implements Filterable {
 
-    private List<String> deviceListFiltered; // Lista que é mostrada
-    private final List<String> deviceListFull;   // Lista original (backup)
-    private OnDeviceClickListener listener;
+    private List<Device> deviceListFiltered = new ArrayList<>(); // Alterado para Device
+    private List<Device> deviceListFull = new ArrayList<>();     // Alterado para Device
+    private final OnDeviceClickListener listener;
 
     public interface OnDeviceClickListener {
-        void onDeviceClick(String deviceName);
+        void onDeviceClick(Device device); // Passa o objeto completo agora
     }
 
-    // O construtor agora recebe a lista completa
-    public DeviceAdapter(List<String> deviceList, OnDeviceClickListener listener) {
-        this.deviceListFull = deviceList;
-        // No início, a lista filtrada é igual à lista completa
-        this.deviceListFiltered = new ArrayList<>(deviceListFull);
+    public DeviceAdapter(OnDeviceClickListener listener) {
         this.listener = listener;
+    }
+
+    // Método auxiliar para atualizar a lista via LiveData
+    public void setDevices(List<Device> devices) {
+        this.deviceListFull = devices;
+        this.deviceListFiltered = new ArrayList<>(devices);
+        notifyDataSetChanged();
     }
 
     @NonNull
@@ -40,43 +44,34 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
 
     @Override
     public void onBindViewHolder(@NonNull DeviceViewHolder holder, int position) {
-        // Usa a lista FILTRADA
-        String deviceName = deviceListFiltered.get(position);
-        holder.bind(deviceName, listener);
+        Device device = deviceListFiltered.get(position);
+        holder.bind(device, listener);
     }
 
     @Override
     public int getItemCount() {
-        // Retorna o tamanho da lista FILTRADA
         return deviceListFiltered.size();
     }
 
-    // --- LÓGICA DO FILTRO ---
     @Override
     public Filter getFilter() {
         return deviceFilter;
     }
 
-    private Filter deviceFilter = new Filter() {
+    private final Filter deviceFilter = new Filter() {
         @Override
         protected FilterResults performFiltering(CharSequence constraint) {
-            List<String> filteredList = new ArrayList<>();
-
-            // Se a pesquisa estiver vazia, mostra a lista completa
+            List<Device> filteredList = new ArrayList<>();
             if (constraint == null || constraint.length() == 0) {
                 filteredList.addAll(deviceListFull);
             } else {
-                // Converte a pesquisa para minúsculas
                 String filterPattern = constraint.toString().toLowerCase().trim();
-
-                // Itera sobre a lista COMPLETA
-                for (String deviceName : deviceListFull) {
-                    if (deviceName.toLowerCase().contains(filterPattern)) {
-                        filteredList.add(deviceName); // Adiciona se corresponder
+                for (Device device : deviceListFull) {
+                    if (device.getName().toLowerCase().contains(filterPattern)) {
+                        filteredList.add(device);
                     }
                 }
             }
-
             FilterResults results = new FilterResults();
             results.values = filteredList;
             return results;
@@ -86,29 +81,35 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         protected void publishResults(CharSequence constraint, FilterResults results) {
             deviceListFiltered.clear();
             deviceListFiltered.addAll((List) results.values);
-            notifyDataSetChanged(); // Atualiza o RecyclerView
+            notifyDataSetChanged();
         }
     };
-    // --- FIM DA LÓGICA DO FILTRO ---
 
     static class DeviceViewHolder extends RecyclerView.ViewHolder {
         TextView deviceNameTextView;
-        TextView creationDateTextView; // IDs do teu XML
-        ImageView deviceIconImageView; // IDs do teu XML
+        TextView creationDateTextView;
+        ImageView deviceIconImageView;
 
         public DeviceViewHolder(@NonNull View itemView) {
             super(itemView);
-            // Certifica-te que estes IDs correspondem ao list_item_device.xml
             deviceNameTextView = itemView.findViewById(R.id.textViewDeviceName);
             creationDateTextView = itemView.findViewById(R.id.textViewCreationDate);
             deviceIconImageView = itemView.findViewById(R.id.imageViewDeviceIcon);
         }
 
-        public void bind(final String deviceName, final OnDeviceClickListener listener) {
-            deviceNameTextView.setText(deviceName);
-            // (Aqui podes definir a data e o ícone se tiveres o modelo Device completo)
-            // creationDateTextView.setText(...);
-            itemView.setOnClickListener(v -> listener.onDeviceClick(deviceName));
+        public void bind(final Device device, final OnDeviceClickListener listener) {
+            deviceNameTextView.setText(device.getName());
+            // Exemplo simples de data:
+            creationDateTextView.setText(new java.util.Date(device.getCreationDate()).toString());
+
+            // Define ícone se válido, senão usa padrão
+            if (device.getIconResId() != 0) {
+                deviceIconImageView.setImageResource(device.getIconResId());
+            } else {
+                deviceIconImageView.setImageResource(R.drawable.ic_launcher_foreground);
+            }
+
+            itemView.setOnClickListener(v -> listener.onDeviceClick(device));
         }
     }
 }
