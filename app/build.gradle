@@ -35,6 +35,13 @@ android {
     buildFeatures {
         compose true
     }
+    sourceSets {
+        main {
+            aidl {
+                srcDirs 'src\\main\\aidl'
+            }
+        }
+    }
 }
 
 dependencies {
@@ -59,8 +66,6 @@ dependencies {
     debugImplementation libs.ui.test.manifest
 
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
-
-    // --- ROOM (A CORREÇÃO ESTÁ AQUI) ---
     def room_version = "2.6.1" // Definindo a versão
     implementation "androidx.room:room-runtime:$room_version"
     implementation "androidx.room:room-ktx:$room_version"

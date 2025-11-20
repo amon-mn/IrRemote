@@ -1,39 +1,43 @@
-// Em: app/src/main/java/devtitans/irremote/ui/activities/DeviceActivity.java
-
 package devtitans.irremote.ui.activities;
 
 import android.hardware.ConsumerIrManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ListView;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import java.util.ArrayList;
-import java.util.List;
-import devtitans.irremote.R;
-import devtitans.irremote.data.repository.IrCommandRepository;
-import devtitans.irremote.data.model.IrCommand;
-import devtitans.irremote.ui.adapters.CommandAdapter;
+
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.appcompat.app.AlertDialog;
-import androidx.annotation.Nullable;
-import android.view.Menu;
-import android.view.MenuItem;
-import androidx.appcompat.widget.SearchView;
+
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import android.os.Handler;
-import android.os.Looper;
-import devtitans.irremote.util.IrLearningUtil;
+
+import devtitans.irremote.R;
+import devtitans.irremote.data.model.IrCommand;
+import devtitans.irremote.data.repository.IrCommandRepository;
+import devtitans.irremote.ui.adapters.CommandAdapter;
+import devtitans.irremote.util.IrLearningListener; // <--- Import da Interface
+import devtitans.irremote.util.IrReflectionUtil;
+import devtitans.irremote.util.IrSignal;           // <--- Import do Modelo
 
 public class DeviceActivity extends AppCompatActivity implements SearchView.OnQueryTextListener {
 
@@ -45,9 +49,10 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
     private TextView textViewEmpty;
     private List<IrCommand> mCommandList = new ArrayList<>();
     private CommandAdapter commandAdapter;
+
+    // Executor para tarefas de background (usado pelo Reflection)
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private ProgressBar progressBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,17 +71,18 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
 
         Toolbar toolbar = findViewById(R.id.toolbar_device);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setTitle(deviceName);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle(deviceName);
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        }
 
         // Referências
         listViewCommands = findViewById(R.id.listViewCommands);
         fabAddCommand = findViewById(R.id.fabAddCommand);
         textViewEmpty = findViewById(R.id.textViewEmpty);
-        progressBar = findViewById(R.id.progressBarLoading);
 
         ir = (ConsumerIrManager) getSystemService(CONSUMER_IR_SERVICE);
-        mRepository = new IrCommandRepository(getApplication()); // Verifique se o Repository está no caminho certo
+        mRepository = new IrCommandRepository(getApplication());
 
         // 1. Configurar o Adapter
         setupAdapter();
@@ -84,24 +90,21 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
         // 2. Observar o Banco de Dados
         observeCommands();
 
-
         // 3. Configurar o FAB
-        // 3. Configurar o FAB com o Fluxo de Aprendizado
         fabAddCommand.setOnClickListener(v -> {
-            // Feedback visual
+            // Inicia fluxo de novo comando (Loading -> Hardware -> Form)
             showAddCommandDialog(null);
         });
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.home_menu, menu); // Infla o novo menu
-
+        getMenuInflater().inflate(R.menu.home_menu, menu);
         MenuItem searchItem = menu.findItem(R.id.action_search);
         SearchView searchView = (SearchView) searchItem.getActionView();
 
         if (searchView != null) {
-            searchView.setOnQueryTextListener(this); // Define esta classe como o "ouvinte"
+            searchView.setOnQueryTextListener(this);
             searchView.setQueryHint("Pesquisar comando...");
         }
         return true;
@@ -109,24 +112,17 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
 
     @Override
     public boolean onQueryTextSubmit(String query) {
-        // Não precisamos de ação no "Submit", apenas na digitação
         return false;
     }
 
     @Override
     public boolean onQueryTextChange(String newText) {
-        // A mágica acontece aqui: O ArrayAdapter (CommandAdapter)
-        // usa o filtro nativo para pesquisar o texto do 'toString()' (o commandName).
         if (commandAdapter != null) {
             commandAdapter.getFilter().filter(newText);
         }
         return true;
     }
-    /**
-     * (ATUALIZADO) Exibe Dialog para Adicionar/Editar.
-     * @param commandToEdit Objeto existente para EDIÇÃO. Null se for novo.
-     * @param learnedData Dados vindos do driver (index 0 = freq, resto = padrão). Null se não houver.
-     */
+
     /**
      * Exibe Dialog. Se commandToEdit for null, inicia o fluxo de Leitura IR (Loading).
      */
@@ -162,74 +158,83 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
             loadingContainer.setVisibility(View.VISIBLE);
             formContainer.setVisibility(View.GONE);
 
-            // Inicia a busca em Background IMEDIATAMENTE
+            // Inicia a busca via Reflection + Proxy
             startIrLearningTask(loadingContainer, formContainer, etFreq, etPattern, etName);
         }
+
         // Botões do Dialog
-        builder.setPositiveButton("Salvar", null); // null aqui para sobrescrever depois (evitar fechar se inválido)
-        builder.setNegativeButton("Cancelar", (dialog, which) -> dialog.cancel());
+        builder.setPositiveButton("Salvar", null);
+        builder.setNegativeButton("Cancelar", (dialog, which) -> {
+            // Se cancelar durante o loading, para o hardware
+            if (!isEditMode) IrReflectionUtil.stopLearning(ir);
+            dialog.cancel();
+        });
 
         AlertDialog dialog = builder.create();
+        dialog.setCancelable(false); // Evita fechar clicando fora durante o loading
         dialog.show();
 
-        // Sobrescreve o botão Positive para adicionar a lógica de salvar
+        // Sobrescreve o botão Positive
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            // Se o loading ainda estiver visível, ignora o clique ou mostra mensagem
             if (loadingContainer.getVisibility() == View.VISIBLE) {
                 Toast.makeText(this, "Aguarde a leitura do sinal...", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Copie o conteúdo do bloco "builder.setPositiveButton" anterior para cá
             saveCommandLogic(dialog, isEditMode, commandToEdit, etName, etFreq, etPattern);
         });
     }
 
-    // --- Lógica de Background movida para metodo auxiliar ---
+    // --- Lógica de Aprendizado (INTEGRADA COM REFLECTION) ---
     private void startIrLearningTask(View loadingView, View formView, EditText etFreq, EditText etPattern, EditText etName) {
-        executor.execute(() -> {
-            try {
-                // SIMULAÇÃO DE ESPERA (2s) - Remova quando o Framework estiver pronto
-                Thread.sleep(2000);
 
-                // CHAMADA REAL (Descomente quando pronto)
-                //int[] learnedData = IrLearningUtil.learnIrCode(ir);
+        // 1. Chama o utilitário que usa Dynamic Proxy para falar com o Framework
+        // OBS: Agora usamos 'IrLearningListener' diretamente (sem o prefixo IrReflectionUtil)
+        IrReflectionUtil.startLearning(ir, executor, new IrLearningListener() {
 
-                // DADOS MOCKADOS PARA TESTE
-                int[] learnedData = new int[]{38000, 9050, 4450, 600, 1600, 600, 600};
-
+            @Override
+            public void onLearned(@NonNull IrSignal signal) {
+                // Dados já vêm empacotados e seguros na classe IrSignal
                 mainHandler.post(() -> {
-                    // Esconde Loading, Mostra Form
                     loadingView.setVisibility(View.GONE);
                     formView.setVisibility(View.VISIBLE);
 
-                    if (learnedData != null && learnedData.length > 0) {
-                        // Preenche os campos
-                        etFreq.setText(String.valueOf(learnedData[0]));
+                    etFreq.setText(String.valueOf(signal.frequency));
+                    etPattern.setText(signal.getPatternString()); // Metodo helper da classe IrSignal
 
-                        StringBuilder sb = new StringBuilder();
-                        for (int i = 1; i < learnedData.length; i++) {
-                            sb.append(learnedData[i]);
-                            if (i < learnedData.length - 1) sb.append(",");
-                        }
-                        etPattern.setText(sb.toString());
-
-                        etName.requestFocus(); // Foco no nome para digitar
-                    } else {
-                        Toast.makeText(this, "Tempo esgotado ou erro na leitura.", Toast.LENGTH_LONG).show();
-                    }
+                    etName.requestFocus();
                 });
+            }
 
-            } catch (Exception e) {
+            @Override
+            public void onError(int errorCode, @NonNull String message) {
                 mainHandler.post(() -> {
+                    // Usamos a constante da Interface IrLearningListener
+                    if (errorCode == IrLearningListener.ERROR_TIMEOUT) {
+                        Toast.makeText(DeviceActivity.this, "Tempo esgotado!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(DeviceActivity.this, "Erro: " + message, Toast.LENGTH_LONG).show();
+                    }
+
                     loadingView.setVisibility(View.GONE);
                     formView.setVisibility(View.VISIBLE);
-                    Toast.makeText(this, "Erro: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
             }
         });
+
+        // 2. Timeout de Segurança (5 segundos)
+        // Se o hardware não responder em 5s, paramos o processo
+        mainHandler.postDelayed(() -> {
+            if (loadingView.getVisibility() == View.VISIBLE) {
+                IrReflectionUtil.stopLearning(ir);
+                Toast.makeText(this, "Tempo esgotado. Tente novamente.", Toast.LENGTH_SHORT).show();
+
+                loadingView.setVisibility(View.GONE);
+                formView.setVisibility(View.VISIBLE);
+            }
+        }, 5000);
     }
 
-    // Método auxiliar só para organizar o código de salvar (copie sua lógica antiga pra cá)
+    // Metodo auxiliar para salvar
     private void saveCommandLogic(AlertDialog dialog, boolean isEditMode, IrCommand commandToEdit, EditText etName, EditText etFreq, EditText etPattern) {
         String commandName = etName.getText().toString().trim();
         if (commandName.isEmpty()) {
@@ -249,7 +254,7 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
                 IrCommand newCmd = new IrCommand(deviceName, commandName, freq, pattern);
                 mRepository.insert(newCmd);
             }
-            dialog.dismiss(); // Fecha o dialog se deu tudo certo
+            dialog.dismiss();
         } catch (Exception e) {
             Toast.makeText(this, "Erro nos dados", Toast.LENGTH_SHORT).show();
         }
@@ -259,13 +264,11 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
         commandAdapter = new CommandAdapter(this, mCommandList,
                 (command) -> transmitCommand(command),
                 (command) -> deleteCommand(command),
-                (command) -> {
-                    // O botão editar passa null no segundo parâmetro (sem dados aprendidos)
-                    showAddCommandDialog(command);
-                }
+                (command) -> showAddCommandDialog(command)
         );
         listViewCommands.setAdapter(commandAdapter);
     }
+
     private void observeCommands() {
         mRepository.getCommandsByDevice(deviceName).observe(this, commands -> {
             commandAdapter.clear();
@@ -281,10 +284,6 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
         });
     }
 
-    /**
-     * (ATUALIZADO E SIMPLIFICADO)
-     * Lógica de Envio (Transmit) - Agora só trata TX
-     */
     private void transmitCommand(IrCommand command) {
         if (ir == null || !ir.hasIrEmitter()) {
             Toast.makeText(this, "Emissor IR não disponível", Toast.LENGTH_SHORT).show();
@@ -298,31 +297,34 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
                 Toast.makeText(this, "Erro no formato do padrão", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Validação de Padrão PAR (da sua MainActivity original)
             if ((pattern.length % 2) != 0) {
-                Toast.makeText(this, "Erro: O padrão deve ter um número PAR de valores (ON/OFF).", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Erro: O padrão deve ter um número PAR de valores.", Toast.LENGTH_LONG).show();
                 return;
             }
-            // Chama o metodo padrão
             ir.transmit(freq, pattern);
-            Toast.makeText(this, "Enviado TX: " + command.getCommandName(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Enviado: " + command.getCommandName(), Toast.LENGTH_SHORT).show();
 
         } catch (Exception e) {
             Toast.makeText(this, "Erro ao enviar: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
-    // Lógica de Exclusão (Delete)
     private void deleteCommand(IrCommand command) {
         mRepository.delete(command);
         commandAdapter.notifyDataSetChanged();
         Toast.makeText(this, command.getCommandName() + " excluído", Toast.LENGTH_SHORT).show();
-        // O LiveData atualizará a lista automaticamente
     }
 
     @Override
     public boolean onSupportNavigateUp() {
-        onBackPressed(); // Lida com o clique no botão "Voltar" da AppBar
+        onBackPressed();
         return true;
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // PARA O APRENDIZADO se o usuário sair da tela
+        IrReflectionUtil.stopLearning(ir);
     }
 }
