@@ -12,6 +12,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
@@ -38,7 +39,7 @@ public class HomeActivity extends AppCompatActivity implements SearchView.OnQuer
     private RecyclerView recyclerViewDevices;
     private DeviceAdapter deviceAdapter;
     private CardView cardStatus;
-    private FloatingActionButton fab; // Botão Flutuante
+    private FloatingActionButton fab;
 
     private DeviceRepository deviceRepository;
 
@@ -59,10 +60,10 @@ public class HomeActivity extends AppCompatActivity implements SearchView.OnQuer
         irStatus = findViewById(R.id.textViewStatus);
         recyclerViewDevices = findViewById(R.id.recyclerViewDevices);
         cardStatus = findViewById(R.id.cardStatus);
-        fab = findViewById(R.id.fab); // Inicializa o FAB
+        fab = findViewById(R.id.fab);
 
         ir = (ConsumerIrManager) getSystemService(CONSUMER_IR_SERVICE);
-        deviceRepository = new DeviceRepository(getApplication()); // Inicializa Repository
+        deviceRepository = new DeviceRepository(getApplication());
 
         // Clique do Card de Status
         cardStatus.setOnClickListener(v -> {
@@ -72,7 +73,8 @@ public class HomeActivity extends AppCompatActivity implements SearchView.OnQuer
 
         // Clique do Botão Adicionar (+)
         fab.setOnClickListener(v -> {
-            showAddDeviceDialog();
+            // Passa null para indicar que é um NOVO dispositivo
+            showDeviceInputDialog(null);
         });
 
         checkEmitterStatus();
@@ -90,10 +92,21 @@ public class HomeActivity extends AppCompatActivity implements SearchView.OnQuer
     }
 
     private void setupRecyclerView() {
-        deviceAdapter = new DeviceAdapter(device -> {
-            Intent intent = new Intent(HomeActivity.this, DeviceActivity.class);
-            intent.putExtra("DEVICE_NAME", device.getName());
-            startActivity(intent);
+        // Agora implementamos a interface completa do Adapter
+        deviceAdapter = new DeviceAdapter(new DeviceAdapter.OnDeviceClickListener() {
+            @Override
+            public void onDeviceClick(Device device) {
+                // Clique Curto: Abre a tela de controle
+                Intent intent = new Intent(HomeActivity.this, DeviceActivity.class);
+                intent.putExtra("DEVICE_NAME", device.getName());
+                startActivity(intent);
+            }
+
+            @Override
+            public void onDeviceLongClick(Device device) {
+                // Clique Longo: Abre opções de Editar/Excluir
+                showOptionsDialog(device);
+            }
         });
 
         int numberOfColumns = 2;
@@ -102,29 +115,60 @@ public class HomeActivity extends AppCompatActivity implements SearchView.OnQuer
 
         // Observa as mudanças no Banco de Dados
         deviceRepository.getAllDevices().observe(this, devices -> {
-            // Apenas atualiza a lista, mesmo que esteja vazia (0 dispositivos)
             if (devices != null) {
                 deviceAdapter.setDevices(devices);
             }
         });
     }
-    // Cria dados iniciais para não ficar vazio na primeira vez
 
-    // Abre o diálogo para criar novo dispositivo
-    private void showAddDeviceDialog() {
+    // --- NOVO: Menu de Opções (Editar / Excluir) ---
+    private void showOptionsDialog(Device device) {
+        CharSequence[] options = new CharSequence[]{"Editar Nome", "Excluir Dispositivo"};
+
+        new AlertDialog.Builder(this)
+                .setTitle("Opções: " + device.getName())
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        // Editar: Reutiliza o dialog de input passando o dispositivo
+                        showDeviceInputDialog(device);
+                    } else {
+                        // Excluir
+                        showDeleteConfirmation(device);
+                    }
+                })
+                .show();
+    }
+
+    // --- ATUALIZADO: Dialog unificado para Criar e Editar ---
+    private void showDeviceInputDialog(@Nullable Device deviceToEdit) {
+        boolean isEditMode = (deviceToEdit != null);
+
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Novo Dispositivo");
+        builder.setTitle(isEditMode ? "Editar Dispositivo" : "Novo Dispositivo");
 
-        // Infla o layout simples (apenas nome)
+        // Infla o layout
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_add_device, null);
         builder.setView(view);
 
         final EditText input = view.findViewById(R.id.editTextDeviceName);
 
+        // Se for edição, preenche o nome atual
+        if (isEditMode) {
+            input.setText(deviceToEdit.getName());
+        }
+
         builder.setPositiveButton("Salvar", (dialog, which) -> {
             String deviceName = input.getText().toString().trim();
             if (!deviceName.isEmpty()) {
-                saveNewDevice(deviceName);
+                if (isEditMode) {
+                    // Atualiza no banco
+                    deviceToEdit.setName(deviceName);
+                    deviceRepository.update(deviceToEdit); // Certifique-se que existe no Repository
+                    Toast.makeText(this, "Nome atualizado!", Toast.LENGTH_SHORT).show();
+                } else {
+                    // Cria novo no banco
+                    saveNewDevice(deviceName);
+                }
             } else {
                 Toast.makeText(this, "Nome inválido", Toast.LENGTH_SHORT).show();
             }
@@ -134,7 +178,20 @@ public class HomeActivity extends AppCompatActivity implements SearchView.OnQuer
         builder.show();
     }
 
-    // Salva no Banco de Dados
+    // --- NOVO: Confirmação de Exclusão ---
+    private void showDeleteConfirmation(Device device) {
+        new AlertDialog.Builder(this)
+                .setTitle("Excluir " + device.getName() + "?")
+                .setMessage("Isso apagará o dispositivo e todos os seus comandos salvos.")
+                .setPositiveButton("Excluir", (dialog, which) -> {
+                    deviceRepository.delete(device); // Certifique-se que existe no Repository
+                    Toast.makeText(this, "Dispositivo excluído.", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    // Salva Novo Dispositivo
     private void saveNewDevice(String name) {
         long now = System.currentTimeMillis();
         Device newDevice = new Device(name, "00:00", now, R.drawable.ic_launcher_foreground);

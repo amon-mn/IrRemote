@@ -6,6 +6,7 @@ import androidx.room.Delete;
 import androidx.room.Insert;
 import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
+import androidx.room.Update;
 
 import java.util.List;
 import devtitans.irremote.data.model.Device;
@@ -15,6 +16,9 @@ public interface DeviceDAO {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     void insert(Device device);
+
+    @Update
+    void update(Device device);
 
     @Delete
     void delete(Device device);

@@ -28,6 +28,12 @@ public class DeviceRepository {
         });
     }
 
+    public void update(Device device) {
+        IrCommandDatabase.databaseWriteExecutor.execute(() -> {
+            mDeviceDAO.update(device);
+        });
+    }
+
     public void delete(Device device) {
         IrCommandDatabase.databaseWriteExecutor.execute(() -> {
             mDeviceDAO.delete(device);

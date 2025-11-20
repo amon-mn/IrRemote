@@ -8,6 +8,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -28,6 +29,11 @@ import androidx.annotation.Nullable;
 import android.view.Menu;
 import android.view.MenuItem;
 import androidx.appcompat.widget.SearchView;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import android.os.Handler;
+import android.os.Looper;
+import devtitans.irremote.util.IrLearningUtil;
 
 public class DeviceActivity extends AppCompatActivity implements SearchView.OnQueryTextListener {
 
@@ -39,12 +45,16 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
     private TextView textViewEmpty;
     private List<IrCommand> mCommandList = new ArrayList<>();
     private CommandAdapter commandAdapter;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private ProgressBar progressBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_device);
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.device_layout_root), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -63,6 +73,7 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
         listViewCommands = findViewById(R.id.listViewCommands);
         fabAddCommand = findViewById(R.id.fabAddCommand);
         textViewEmpty = findViewById(R.id.textViewEmpty);
+        progressBar = findViewById(R.id.progressBarLoading);
 
         ir = (ConsumerIrManager) getSystemService(CONSUMER_IR_SERVICE);
         mRepository = new IrCommandRepository(getApplication()); // Verifique se o Repository está no caminho certo
@@ -73,8 +84,11 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
         // 2. Observar o Banco de Dados
         observeCommands();
 
+
         // 3. Configurar o FAB
+        // 3. Configurar o FAB com o Fluxo de Aprendizado
         fabAddCommand.setOnClickListener(v -> {
+            // Feedback visual
             showAddCommandDialog(null);
         });
     }
@@ -108,98 +122,150 @@ public class DeviceActivity extends AppCompatActivity implements SearchView.OnQu
         }
         return true;
     }
-
     /**
-     * (ATUALIZADO E SIMPLIFICADO)
-     * Cria e exibe um AlertDialog para ADICIONAR ou EDITAR um comando.
-     * @param commandToEdit O comando a ser editado, ou 'null' se for para criar um novo.
+     * (ATUALIZADO) Exibe Dialog para Adicionar/Editar.
+     * @param commandToEdit Objeto existente para EDIÇÃO. Null se for novo.
+     * @param learnedData Dados vindos do driver (index 0 = freq, resto = padrão). Null se não houver.
+     */
+    /**
+     * Exibe Dialog. Se commandToEdit for null, inicia o fluxo de Leitura IR (Loading).
      */
     private void showAddCommandDialog(@Nullable IrCommand commandToEdit) {
         final boolean isEditMode = (commandToEdit != null);
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         LayoutInflater inflater = this.getLayoutInflater();
-        View dialogView = inflater.inflate(R.layout.dialog_add_command, null); // Usa o novo XML (sem RadioButtons)
+        View dialogView = inflater.inflate(R.layout.dialog_add_command, null);
         builder.setView(dialogView);
-        builder.setTitle(isEditMode ? "Editar Comando" : "Adicionar Novo Comando");
+        builder.setTitle(isEditMode ? "Editar Comando" : "Novo Comando IR");
 
-        // Referências aos campos (agora apenas 3 campos)
+        // Referências de Layout
+        View loadingContainer = dialogView.findViewById(R.id.loadingContainer);
+        View formContainer = dialogView.findViewById(R.id.formContainer);
+
+        // Referências de Campos
         EditText etName = dialogView.findViewById(R.id.editTextCommandName);
         EditText etFreq = dialogView.findViewById(R.id.editTextFrequency);
         EditText etPattern = dialogView.findViewById(R.id.editTextPattern);
 
-        // Removemos a lógica do RadioGroup
-
-        // --- LÓGICA DE PRÉ-PREENCHIMENTO (Modo Edição) ---
+        // --- CONTROLE DE ESTADO INICIAL ---
         if (isEditMode) {
+            // MODO EDIÇÃO: Mostra form direto, preenchido
+            loadingContainer.setVisibility(View.GONE);
+            formContainer.setVisibility(View.VISIBLE);
+
             etName.setText(commandToEdit.getCommandName());
             etFreq.setText(String.valueOf(commandToEdit.getFrequency()));
             etPattern.setText(commandToEdit.getPattern());
-        }
-        // ------------------------------------------------
+        } else {
+            // MODO NOVO: Mostra Loading e esconde Form
+            loadingContainer.setVisibility(View.VISIBLE);
+            formContainer.setVisibility(View.GONE);
 
-        // Botão "Salvar" (agora só faz Insert ou Update de TX)
-        builder.setPositiveButton(isEditMode ? "Salvar Alterações" : "Salvar", (dialog, which) -> {
-            String commandName = etName.getText().toString().trim();
-            if (commandName.isEmpty()) {
-                Toast.makeText(this, "Nome não pode ser vazio", Toast.LENGTH_SHORT).show();
+            // Inicia a busca em Background IMEDIATAMENTE
+            startIrLearningTask(loadingContainer, formContainer, etFreq, etPattern, etName);
+        }
+        // Botões do Dialog
+        builder.setPositiveButton("Salvar", null); // null aqui para sobrescrever depois (evitar fechar se inválido)
+        builder.setNegativeButton("Cancelar", (dialog, which) -> dialog.cancel());
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        // Sobrescreve o botão Positive para adicionar a lógica de salvar
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            // Se o loading ainda estiver visível, ignora o clique ou mostra mensagem
+            if (loadingContainer.getVisibility() == View.VISIBLE) {
+                Toast.makeText(this, "Aguarde a leitura do sinal...", Toast.LENGTH_SHORT).show();
                 return;
             }
+            // Copie o conteúdo do bloco "builder.setPositiveButton" anterior para cá
+            saveCommandLogic(dialog, isEditMode, commandToEdit, etName, etFreq, etPattern);
+        });
+    }
 
+    // --- Lógica de Background movida para metodo auxiliar ---
+    private void startIrLearningTask(View loadingView, View formView, EditText etFreq, EditText etPattern, EditText etName) {
+        executor.execute(() -> {
             try {
-                // --- Lógica de Salvar (Raw TX) ---
-                String freqStr = etFreq.getText().toString();
-                String patternStr = etPattern.getText().toString().trim();
+                // SIMULAÇÃO DE ESPERA (2s) - Remova quando o Framework estiver pronto
+                Thread.sleep(2000);
 
-                if (freqStr.isEmpty() || patternStr.isEmpty()) {
-                    Toast.makeText(this, "Frequência e Padrão são obrigatórios", Toast.LENGTH_SHORT).show();
-                    return;
-                }
+                // CHAMADA REAL (Descomente quando pronto)
+                //int[] learnedData = IrLearningUtil.learnIrCode(ir);
 
-                int freq = Integer.parseInt(freqStr);
+                // DADOS MOCKADOS PARA TESTE
+                int[] learnedData = new int[]{38000, 9050, 4450, 600, 1600, 600, 600};
 
-                // --- LÓGICA DE SALVAR vs ATUALIZAR ---
-                if (isEditMode) {
-                    // Atualiza o objeto existente
-                    commandToEdit.setCommandName(commandName);
-                    commandToEdit.setFrequency(freq);
-                    commandToEdit.setPattern(patternStr);
-                    mRepository.update(commandToEdit);
-                    Toast.makeText(this, "Comando atualizado", Toast.LENGTH_SHORT).show();
-                } else {
-                    // Cria um novo comando
-                    IrCommand newCommand = new IrCommand(deviceName, commandName, freq, patternStr);
-                    mRepository.insert(newCommand);
-                    Toast.makeText(this, "Comando salvo", Toast.LENGTH_SHORT).show();
-                }
+                mainHandler.post(() -> {
+                    // Esconde Loading, Mostra Form
+                    loadingView.setVisibility(View.GONE);
+                    formView.setVisibility(View.VISIBLE);
+
+                    if (learnedData != null && learnedData.length > 0) {
+                        // Preenche os campos
+                        etFreq.setText(String.valueOf(learnedData[0]));
+
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 1; i < learnedData.length; i++) {
+                            sb.append(learnedData[i]);
+                            if (i < learnedData.length - 1) sb.append(",");
+                        }
+                        etPattern.setText(sb.toString());
+
+                        etName.requestFocus(); // Foco no nome para digitar
+                    } else {
+                        Toast.makeText(this, "Tempo esgotado ou erro na leitura.", Toast.LENGTH_LONG).show();
+                    }
+                });
 
             } catch (Exception e) {
-                Toast.makeText(this, "Erro ao salvar: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                mainHandler.post(() -> {
+                    loadingView.setVisibility(View.GONE);
+                    formView.setVisibility(View.VISIBLE);
+                    Toast.makeText(this, "Erro: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
             }
         });
+    }
 
-        builder.setNegativeButton("Cancelar", (dialog, which) -> dialog.cancel());
-        builder.show();
+    // Método auxiliar só para organizar o código de salvar (copie sua lógica antiga pra cá)
+    private void saveCommandLogic(AlertDialog dialog, boolean isEditMode, IrCommand commandToEdit, EditText etName, EditText etFreq, EditText etPattern) {
+        String commandName = etName.getText().toString().trim();
+        if (commandName.isEmpty()) {
+            Toast.makeText(this, "Nome obrigatório", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            int freq = Integer.parseInt(etFreq.getText().toString());
+            String pattern = etPattern.getText().toString().trim();
+
+            if (isEditMode) {
+                commandToEdit.setCommandName(commandName);
+                commandToEdit.setFrequency(freq);
+                commandToEdit.setPattern(pattern);
+                mRepository.update(commandToEdit);
+            } else {
+                IrCommand newCmd = new IrCommand(deviceName, commandName, freq, pattern);
+                mRepository.insert(newCmd);
+            }
+            dialog.dismiss(); // Fecha o dialog se deu tudo certo
+        } catch (Exception e) {
+            Toast.makeText(this, "Erro nos dados", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void setupAdapter() {
         commandAdapter = new CommandAdapter(this, mCommandList,
-                // Implementação do clique "Send"
+                (command) -> transmitCommand(command),
+                (command) -> deleteCommand(command),
                 (command) -> {
-                    transmitCommand(command);
-                },
-                // Implementação do clique "Delete"
-                (command) -> {
-                    deleteCommand(command);
-                },
-                // Implementação do clique "Edit"
-                (command) -> {
-                    showAddCommandDialog(command); // Passa o comando a ser editado
+                    // O botão editar passa null no segundo parâmetro (sem dados aprendidos)
+                    showAddCommandDialog(command);
                 }
         );
         listViewCommands.setAdapter(commandAdapter);
     }
-
     private void observeCommands() {
         mRepository.getCommandsByDevice(deviceName).observe(this, commands -> {
             commandAdapter.clear();

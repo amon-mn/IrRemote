@@ -9,26 +9,31 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import devtitans.irremote.R;
-import devtitans.irremote.data.model.Device; // Importar Modelo
+import devtitans.irremote.data.model.Device;
 
 public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder> implements Filterable {
 
-    private List<Device> deviceListFiltered = new ArrayList<>(); // Alterado para Device
-    private List<Device> deviceListFull = new ArrayList<>();     // Alterado para Device
+    private List<Device> deviceListFiltered = new ArrayList<>();
+    private List<Device> deviceListFull = new ArrayList<>();
     private final OnDeviceClickListener listener;
 
+    // Interface para comunicar com a HomeActivity
     public interface OnDeviceClickListener {
-        void onDeviceClick(Device device); // Passa o objeto completo agora
+        void onDeviceClick(Device device);      // Clique simples (Abrir)
+        void onDeviceLongClick(Device device);  // Clique longo (Editar/Excluir)
     }
 
     public DeviceAdapter(OnDeviceClickListener listener) {
         this.listener = listener;
     }
 
-    // Método auxiliar para atualizar a lista via LiveData
+    // Atualiza a lista quando o LiveData muda
     public void setDevices(List<Device> devices) {
         this.deviceListFull = devices;
         this.deviceListFiltered = new ArrayList<>(devices);
@@ -53,6 +58,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         return deviceListFiltered.size();
     }
 
+    // --- LÓGICA DE FILTRO (SEARCH VIEW) ---
     @Override
     public Filter getFilter() {
         return deviceFilter;
@@ -85,10 +91,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
         }
     };
 
+    // --- VIEWHOLDER ---
     static class DeviceViewHolder extends RecyclerView.ViewHolder {
         TextView deviceNameTextView;
         TextView creationDateTextView;
         ImageView deviceIconImageView;
+
+        // Formatador de data para ficar bonito na tela (Ex: 19/11/2025)
+        private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
 
         public DeviceViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -99,17 +109,29 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.DeviceView
 
         public void bind(final Device device, final OnDeviceClickListener listener) {
             deviceNameTextView.setText(device.getName());
-            // Exemplo simples de data:
-            creationDateTextView.setText(new java.util.Date(device.getCreationDate()).toString());
 
-            // Define ícone se válido, senão usa padrão
+            // Formatação de data segura
+            if (device.getCreationDate() > 0) {
+                creationDateTextView.setText(dateFormat.format(new Date(device.getCreationDate())));
+            } else {
+                creationDateTextView.setText("");
+            }
+
+            // Ícone
             if (device.getIconResId() != 0) {
                 deviceIconImageView.setImageResource(device.getIconResId());
             } else {
-                deviceIconImageView.setImageResource(R.drawable.ic_launcher_foreground);
+                deviceIconImageView.setImageResource(R.drawable.ic_launcher_foreground); // Ícone padrão
             }
 
+            // 1. CLIQUE SIMPLES
             itemView.setOnClickListener(v -> listener.onDeviceClick(device));
+
+            // 2. CLIQUE LONGO (CRÍTICO PARA EDITAR/DELETAR)
+            itemView.setOnLongClickListener(v -> {
+                listener.onDeviceLongClick(device);
+                return true; // Retorna true para indicar que o evento foi consumido
+            });
         }
     }
 }
